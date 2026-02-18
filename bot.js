@@ -1,16 +1,17 @@
 // =========================
 // IMPORTS
 // =========================
-const { Client: WhatsAppClient, LocalAuth } = require("whatsapp-web.js");
+const { Client: WhatsAppClient, LocalAuth, MessageMedia } = require("whatsapp-web.js");
 const { Client: DiscordClient, GatewayIntentBits } = require("discord.js");
 const qrcode = require("qrcode-terminal");
 const puppeteer = require("puppeteer");
+const fetch = require("node-fetch");
 
 // =========================
-/* CONFIG À REMPLACER */
+// CONFIG À REMPLACER
 // =========================
-const DISCORD_TOKEN = "Ton token";
-const DISCORD_CHANNEL_ID = "id chanelle discord";
+const DISCORD_TOKEN = "TON_TOKEN_DISCORD";
+const DISCORD_CHANNEL_ID = "ID_DU_CHANNEL_DISCORD";
 
 // =========================
 // VARIABLES GLOBALES
@@ -46,7 +47,7 @@ const whatsapp = new WhatsAppClient({
     }
 });
 
-// QR CODE DANS LES LOGS
+// QR CODE
 whatsapp.on("qr", qr => {
     console.log("\n📱 Scanne ce QR code pour connecter WhatsApp :\n");
     qrcode.generate(qr, { small: true });
@@ -127,6 +128,59 @@ discord.on("messageCreate", async message => {
     // Envoi Discord → WhatsApp
     // ----------------------------
     if (TARGET_GROUP_ID) {
+
+        // ----- FICHIER DISCORD → WHATSAPP -----
+        if (message.attachments.size > 0) {
+            const file = message.attachments.first();
+            const pseudo = message.member?.nickname || message.author.username;
+
+            // ----- VOCAL -----
+            if (file.contentType.startsWith("audio")) {
+                const audioBuffer = await fetch(file.url).then(res => res.arrayBuffer());
+
+                await whatsapp.sendMessage(
+                    TARGET_GROUP_ID,
+                    Buffer.from(audioBuffer),
+                    { sendAudioAsVoice: true }
+                );
+
+                return message.reply("🎤 Vocal envoyé sur WhatsApp !");
+            }
+
+            // ----- IMAGE -----
+            if (file.contentType.startsWith("image")) {
+                const imgBuffer = await fetch(file.url).then(res => res.arrayBuffer());
+                const base64 = Buffer.from(imgBuffer).toString("base64");
+
+                const media = new MessageMedia(file.contentType, base64, "image.jpg");
+
+                await whatsapp.sendMessage(
+                    TARGET_GROUP_ID,
+                    media,
+                    { caption: `[Discord | ${pseudo}]` }
+                );
+
+                return message.reply("🖼️ Image envoyée sur WhatsApp !");
+            }
+
+            // ----- VIDÉO -----
+            if (file.contentType.startsWith("video")) {
+                const vidBuffer = await fetch(file.url).then(res => res.arrayBuffer());
+                const base64 = Buffer.from(vidBuffer).toString("base64");
+
+                const media = new MessageMedia(file.contentType, base64, "video.mp4");
+
+                await whatsapp.sendMessage(
+                    TARGET_GROUP_ID,
+                    media,
+                    { caption: `[Discord | ${pseudo}]` }
+                );
+
+                return message.reply("🎬 Vidéo envoyée sur WhatsApp !");
+            }
+        }
+
+        // ----- TEXTE DISCORD → WHATSAPP -----
         const pseudo = message.member?.nickname || message.author.username;
         await whatsapp.sendMessage(
             TARGET_GROUP_ID,
@@ -139,23 +193,58 @@ discord.on("messageCreate", async message => {
 // WHATSAPP → DISCORD
 // =========================
 whatsapp.on("message", async msg => {
+    if (!TARGET_GROUP_ID) return;
+    if (msg.from !== TARGET_GROUP_ID) return;
+
     const channel = await discord.channels.fetch(DISCORD_CHANNEL_ID).catch(() => null);
     if (!channel) return;
 
-    const chat = await msg.getChat();
-    let senderName = "Inconnu";
+    const contact = await msg.getContact();
+    const senderName =
+        contact.pushname ||
+        contact.verifiedName ||
+        contact.name ||
+        contact.number;
 
-    if (msg.fromMe) {
-        senderName = "Moi";
-    } else {
-        const contact = await msg.getContact();
-        senderName =
-            contact.pushname ||
-            contact.verifiedName ||
-            contact.name ||
-            contact.number;
+    // ----- MEDIA (VOCAL + IMAGE + VIDÉO) -----
+    if (msg.hasMedia) {
+        const media = await msg.downloadMedia();
+
+        // VOCAL
+        if (media.mimetype.startsWith("audio")) {
+            return channel.send({
+                content: `🎤 **WhatsApp | ${senderName} a envoyé un vocal :**`,
+                files: [{
+                    attachment: Buffer.from(media.data, "base64"),
+                    name: "vocal.ogg"
+                }]
+            });
+        }
+
+        // IMAGE
+        if (media.mimetype.startsWith("image")) {
+            return channel.send({
+                content: `🖼️ **WhatsApp | ${senderName} a envoyé une image :**`,
+                files: [{
+                    attachment: Buffer.from(media.data, "base64"),
+                    name: "image.jpg"
+                }]
+            });
+        }
+
+        // VIDÉO
+        if (media.mimetype.startsWith("video")) {
+            return channel.send({
+                content: `🎬 **WhatsApp | ${senderName} a envoyé une vidéo :**`,
+                files: [{
+                    attachment: Buffer.from(media.data, "base64"),
+                    name: "video.mp4"
+                }]
+            });
+        }
     }
 
+    // ----- TEXTE -----
     channel.send(`📩 **WhatsApp | ${senderName} :** ${msg.body}`);
 });
 
