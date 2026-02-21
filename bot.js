@@ -15,16 +15,16 @@ const DISCORD_CHANNEL_ID = "id chanelle";const DATA_FILE = "./accepted.json";
 const CONDITIONS = `
 ?? Conditions de l’interface WhatsApp
 
-Merci de respecter les règles suivantes :
+Merci de respecter les regles suivantes :
 
-? Pas de spam  
-?? 1 message toutes les 3 secondes maximum  
-?? Interface uniquement pour parler de l’école  
-?? Messages inutiles interdits  
-?? Contenu illégal interdit  
-?? Insultes interdites  
+Pas de spam  
+1 message toutes les 3 secondes maximum  
+Interface uniquement pour parler de l’ecole  
+Messages inutiles interdits  
+Contenu illegal interdit  
+Insultes interdites  
 
-?? Tape !accepte pour continuer.
+Tape !accepte pour continuer.
 `;
 
 // ================= GLOBALS =================
@@ -192,7 +192,7 @@ whatsapp.on("message", async msg => {
         }
 
         return channel.send({
-            content: `?? WhatsApp | ${sender}`,
+            content: `# WhatsApp | ${sender}`,
             files: [{ attachment: buffer, name: "file" }]
         });
     }
